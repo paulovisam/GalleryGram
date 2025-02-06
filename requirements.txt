@@ -1,0 +1,15 @@
+colorama==0.4.6
+halo==0.0.31
+log-symbols==0.0.14
+pillow==11.1.0
+pyaes==1.6.1
+pyfiglet==1.0.2
+Pyrogram==2.0.106
+PySocks==1.7.1
+python-dotenv==1.0.1
+six==1.17.0
+spinners==0.0.24
+termcolor==2.5.0
+TgCrypto==1.2.5
+tk==0.1.0
+tqdm==4.67.1
