@@ -18,4 +18,10 @@ info_handler.setLevel(logging.INFO)
 info_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(info_handler)
 
+# Criando um handler para o terminal
+terminal_handler = logging.StreamHandler()
+terminal_handler.setLevel(logging.INFO)
+terminal_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(terminal_handler)
+
 log = logging

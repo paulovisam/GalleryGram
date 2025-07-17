@@ -13,6 +13,7 @@ import pyfiglet  # type: ignore
 
 from banner import Banner
 from log import logger
+from schema import Settings
 
 
 def get_config() -> Tuple[str, str]:
@@ -66,91 +67,117 @@ def enviar_fotos_agrupadas(
     channel_id: str,
     pasta_fotos: Path,
     arquivos_enviados: Set[str],
-    type_photo: List[str],
-    type_video: List[str],
-    pause: int,
     arquivo_registro: Path,
 ) -> None:
     """
     Envia fotos e vídeos em grupos para um canal do Telegram.
     """
-    print(f"Processando a pasta: {pasta_fotos}")
-    TYPE_FILE = type_photo + type_video
+    try:
+        settings = get_settings()
 
-    # Lista e ordena os arquivos com as extensões permitidas
-    fotos = sorted(
-        [
-            f.name
-            for f in pasta_fotos.iterdir()
-            if f.is_file() and f.suffix.lower() in [ext.lower() for ext in TYPE_FILE]
-        ]
-    )
+        print(f"Processando a pasta: {pasta_fotos}")
+        TYPE_FILE = settings.get_type_file()
 
-    if not fotos:
-        print("Nenhuma foto encontrada na pasta.")
-        return
+        # Lista e ordena os arquivos com as extensões permitidas
 
-    total_fotos = len(fotos)
-    # Divide a lista em grupos de até 10 arquivos
-    fotos_agrupadas = [fotos[i : i + 10] for i in range(0, total_fotos, 10)]
+        # # Primeiro, converte todas as extensões válidas para minúsculas para comparação
+        # extensoes_validas = [extensao.lower() for extensao in TYPE_FILE]
+        
+        # # Lista todos os itens na pasta
+        # stodos_itens = list(pasta_fotos.iterdir())
+        
+        # # Filtra apenas os arquivos (exclui diretórios)
+        # apenas_arquivos = [item for item in todos_itens if item.is_file()]
+        
+        # # Filtra arquivos que possuem extensões válidas
+        # arquivos_validos = []
+        # for arquivo in apenas_arquivos:
+        #     extensao_arquivo = arquivo.suffix.lower().replace(".", "")
+        #     if extensao_arquivo in extensoes_validas:
+        #         arquivos_validos.append(arquivo.name)
+        
+        # # Ordena os nomes dos arquivos em ordem alfabética
+        # fotos = sorted(arquivos_validos)
+        fotos = sorted(
+                [
+                    f.name
+                    for f in pasta_fotos.iterdir()
+                    if f.is_file() and f.suffix.lower().replace(".", "") in [ext.lower() for ext in TYPE_FILE]
+                ]
+            )
 
-    with tqdm(total=total_fotos, desc="Enviando fotos", unit="foto") as pbar:
-        with app:
-            # Caso não haja channel_id, cria um novo canal
-            if not channel_id:
-                channel = app.create_channel("GalleryGram")
-                channel_link = app.export_chat_invite_link(channel.id)
-                channel_id = channel.id
-                description = (
-                    f"Sua coleção de fotos no Telegram\n\nID {channel_id}\nLink: {channel_link}"
-                )
-                app.set_chat_description(channel_id, description)
+        if not fotos:
+            print("Nenhuma foto encontrada na pasta.")
+            return
 
-            folder_tag = f"#{pasta_fotos.name}"
-            app.send_message(channel_id, folder_tag)
+        total_fotos = len(fotos)
+        # Divide a lista em grupos de até 10 arquivos
+        fotos_agrupadas = [fotos[i : i + 10] for i in range(0, total_fotos, 10)]
 
-            for grupo in fotos_agrupadas:
-                media = []
-                novos_arquivos_enviados = []
-                for arquivo in grupo:
-                    if arquivo in arquivos_enviados:
-                        continue
-                    caminho_arquivo = str(pasta_fotos / arquivo)
-                    if arquivo.lower().endswith(tuple([ext.lower() for ext in type_photo])):
-                        media.append(InputMediaPhoto(caminho_arquivo))
-                    elif arquivo.lower().endswith(tuple([ext.lower() for ext in type_video])):
-                        media.append(InputMediaVideo(caminho_arquivo))
-                    novos_arquivos_enviados.append(arquivo)
-                    arquivos_enviados.add(arquivo)
-                if media:
-                    print("\tEnviando grupo de arquivos...")
-                    app.send_media_group(channel_id, media)
-                    pbar.update(len(grupo))
-                    for arquivo in novos_arquivos_enviados:
-                        salvar_arquivo_enviado(arquivo_registro, arquivo)
-                    time.sleep(pause)
+        with tqdm(total=total_fotos, desc="Enviando fotos", unit="foto") as pbar:
+            with app:
+                # Caso não haja channel_id, cria um novo canal
+                if not channel_id:
+                    channel = app.create_channel(settings.channel_name)
+                    channel_link = app.export_chat_invite_link(channel.id)
+                    channel_id = channel.id
+                    description = (
+                        f"Sua coleção de fotos no Telegram\n\nID {channel_id}\nLink: {channel_link}"
+                    )
+                    app.set_chat_description(channel_id, description)
+
+                folder_tag = f"#{pasta_fotos.name}"
+                app.send_message(channel_id, folder_tag)
+
+                for grupo in fotos_agrupadas:
+                    media = []
+                    novos_arquivos_enviados = []
+                    for arquivo in grupo:
+                        if arquivo in arquivos_enviados:
+                            continue
+                        caminho_arquivo = str(pasta_fotos / arquivo)
+                        if arquivo.lower().endswith(tuple([ext.lower() for ext in settings.type_photo])):
+                            media.append(InputMediaPhoto(caminho_arquivo))
+                        elif arquivo.lower().endswith(tuple([ext.lower() for ext in settings.type_video])):
+                            media.append(InputMediaVideo(caminho_arquivo))
+                        novos_arquivos_enviados.append(arquivo)
+                        arquivos_enviados.add(arquivo)
+                    if media:
+                        print("\tEnviando grupo de arquivos...")
+                        app.send_media_group(channel_id, media)
+                        pbar.update(len(grupo))
+                        for arquivo in novos_arquivos_enviados:
+                            salvar_arquivo_enviado(arquivo_registro, arquivo)
+                        time.sleep(settings.pause)
+    except Exception as e:
+        logger.error("Erro ao enviar fotos agrupadas: %s", e)
+        raise
 
 
-def get_settings() -> Tuple[List[str], List[str], int, List[str]]:
+def get_settings() -> Settings:
     """
     Lê as configurações do arquivo config.ini e retorna as extensões permitidas
     para fotos, vídeos e o tempo de pausa entre os envios.
     """
     config = configparser.ConfigParser()
     config.read("config.ini")
-
+    # return settings
     # Utiliza ast.literal_eval para converter as strings de lista
     try:
-        ignore_folders = ast.literal_eval(config.get("settings", "IGNORE_FOLDERS", fallback="[]"))
-        type_photo = ast.literal_eval(config.get("settings", "TYPE_PHOTO", fallback="[]"))
-        type_video = ast.literal_eval(config.get("settings", "TYPE_VIDEO", fallback="[]"))
-        pause = int(config.get("settings", "PAUSE", fallback="1"))
+        settings = Settings(
+            ignore_folders = ast.literal_eval(config.get("settings", "IGNORE_FOLDERS", fallback="[]"))['ignore_folders'],
+            type_photo = ast.literal_eval(config.get("settings", "TYPE_PHOTO", fallback="[]")),
+            type_video = ast.literal_eval(config.get("settings", "TYPE_VIDEO", fallback="[]")),
+            pause = int(config.get("settings", "PAUSE", fallback="1")),
+            api_id = config.get("settings", "API_ID", fallback=""),
+            api_hash = config.get("settings", "API_HASH", fallback=""),
+            channel_name = config.get("settings", "CHANNEL_NAME", fallback="GalleryGram"),
+        )
     except (ValueError, SyntaxError) as e:
         logger.error("Erro ao interpretar as configurações: %s", e)
         raise
+    return settings
 
-    type_file = type_photo + type_video
-    return type_photo, type_video, pause, type_file
 
 
 def main():
@@ -177,16 +204,15 @@ def main():
 
     # Cria o cliente do Pyrogram
     app = Client("user", api_id=api_id, api_hash=api_hash)
-
-    # Lê as configurações
-    type_photo, type_video, pause, _ = get_settings()
+    
 
     # Pergunta o ID do canal (se vazio, será criado um novo)
     channel_id = input("ID do canal de destino (vazio para criar um novo): ").strip()
 
     print("Insira o caminho das pastas (separado por vírgula):")
     while True:
-        str_pastas = input().strip()
+        # str_pastas = input().strip()
+        str_pastas = "/home/paulo/workspace/GalleryGram/photo"
         if not str_pastas:
             print("Insira um caminho válido!")
         else:
@@ -205,9 +231,6 @@ def main():
                 channel_id=channel_id,
                 pasta_fotos=pasta,
                 arquivos_enviados=arquivos_enviados,
-                type_photo=type_photo,
-                type_video=type_video,
-                pause=pause,
                 arquivo_registro=arquivo_registro,
             )
         except Exception as e:
